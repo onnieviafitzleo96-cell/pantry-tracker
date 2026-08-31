@@ -4,7 +4,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 1. Initial Load - Table View
+// 1. Initial Load - Mobile Card/List
 async function loadPantry() {
   const container = document.getElementById('pantryContainer');
   if (!container) return;
@@ -18,70 +18,53 @@ async function loadPantry() {
     if (error) throw error;
 
     if (!items || items.length === 0) {
-      container.innerHTML = '<p style="color: #64748b; padding: 12px 0;">No items in pantry. Add your first item above!</p>';
+      container.innerHTML = '<p style="color: #64748b; font-size: 14px;">No items in pantry. Add one above!</p>';
       loadVendorList();
       return;
     }
 
-    container.innerHTML = `
-      <table>
-        <thead>
-          <tr>
-            <th>Item Name</th>
-            <th>Date Added</th>
-            <th>Stock Left</th>
-            <th>Alert Threshold</th>
-            <th>Adjust Quantity</th>
-            <th style="text-align: right;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items.map(item => {
-            const isLow = item.current_qty <= item.threshold_qty;
-            const dateAdded = item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A';
+    container.innerHTML = items.map(item => {
+      const isLow = item.current_qty <= item.threshold_qty;
+      const dateAdded = item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A';
 
-            return `
-              <tr class="${isLow ? 'low-stock-row' : ''}">
-                <td>
-                  <strong>${item.name}</strong>
-                  ${isLow ? '<span class="badge-low">REORDER</span>' : ''}
-                </td>
-                <td style="color: #64748b;">${dateAdded}</td>
-                <td>
-                  <strong style="font-size: 16px; color: ${isLow ? '#dc2626' : '#0f172a'};">${item.current_qty}</strong>
-                </td>
-                <td style="color: #64748b;">${item.threshold_qty}</td>
-                <td>
-                  <div style="display: flex; gap: 6px; align-items: center;">
-                    <button class="qty-btn" type="button" title="Remove" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'minus')">-</button>
-                    <button class="qty-btn" type="button" title="Add" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'add')">+</button>
-                  </div>
-                </td>
-                <td style="text-align: right;">
-                  <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
-                    ${isLow ? `
-                      <button class="btn btn-reorder" type="button" onclick="promptVendorOrder('${item.id}', '${item.name}')">
-                        + Add to Vendor List
-                      </button>
-                    ` : ''}
-                    <button class="btn btn-delete" type="button" onclick="deleteItem('${item.id}', '${item.name}')">Delete</button>
-                  </div>
-                </td>
-              </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-    `;
+      return `
+        <div class="item-row ${isLow ? 'low-stock' : ''}">
+          <div class="item-header">
+            <strong>${item.name}</strong>
+            ${isLow ? '<span class="badge-low">LOW STOCK</span>' : ''}
+          </div>
+          
+          <div class="item-details">
+            <div>
+              Stock: <span class="stock-highlight" style="color: ${isLow ? '#dc2626' : '#0f172a'};">${item.current_qty}</span>
+              <span style="font-size: 11px;">(Min: ${item.threshold_qty})</span>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Added: ${dateAdded}</div>
+            </div>
+
+            <div class="qty-controls">
+              <button class="qty-btn" type="button" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'minus')">-</button>
+              <button class="qty-btn" type="button" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'add')">+</button>
+              <button class="btn btn-delete" type="button" onclick="deleteItem('${item.id}', '${item.name}')">🗑</button>
+            </div>
+          </div>
+
+          ${isLow ? `
+            <button class="btn-reorder" type="button" onclick="openOrderModal('${item.id}', '${item.name}')">
+              + Add to Vendor Reorder List
+            </button>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
 
     loadVendorList();
   } catch (err) {
     console.error(err);
-    container.innerHTML = `<p style="color: red;">Error connecting to database: ${err.message || 'Check console'}</p>`;
+    container.innerHTML = `<p style="color: red; font-size: 13px;">Error: ${err.message || 'Check connection'}</p>`;
   }
 }
 
-// 2. Add New Pantry Item
+// 2. Add Item
 document.getElementById('addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('name').value.trim();
@@ -93,157 +76,137 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
     .insert([{ name, current_qty, threshold_qty }]);
 
   if (error) {
-    alert("Error adding item: " + error.message);
+    alert("Error: " + error.message);
   } else {
     document.getElementById('addForm').reset();
     loadPantry();
   }
 });
 
-// 3. Pop-up input to subtract or add quantity
+// 3. Quick +/- Quantity Prompt
 async function promptQuantityUpdate(id, name, currentQty, type) {
-  const actionText = type === 'minus' ? 'REMOVE / CONSUME from' : 'ADD to';
-  const input = prompt(`How many units do you want to ${actionText} "${name}"?`, "1");
-  
+  const actionText = type === 'minus' ? 'TAKE OUT / CONSUME from' : 'ADD to';
+  const input = prompt(`How many units to ${actionText} "${name}"?`, "1");
   if (input === null) return;
-  const count = parseInt(input);
 
-  if (isNaN(count) || count <= 0) {
-    alert("Please enter a valid positive number.");
-    return;
-  }
+  const count = parseInt(input);
+  if (isNaN(count) || count <= 0) return alert("Please enter a valid positive number.");
 
   const newQty = type === 'minus' ? Math.max(0, currentQty - count) : currentQty + count;
 
-  const { error } = await supabaseClient
-    .from('pantry_items')
-    .update({ current_qty: newQty })
-    .eq('id', id);
-
-  if (error) {
-    alert("Error updating quantity: " + error.message);
-  } else {
-    loadPantry();
-  }
+  await supabaseClient.from('pantry_items').update({ current_qty: newQty }).eq('id', id);
+  loadPantry();
 }
 
-// 4. Pop-up input to reorder items for vendor list
-async function promptVendorOrder(itemId, itemName) {
-  const input = prompt(`How many units of "${itemName}" should be ordered next month?`, "24");
-  if (input === null) return;
+// 4. Modal Flow for Pack / Carton Vendor Order
+function openOrderModal(id, name) {
+  document.getElementById('modalItemId').value = id;
+  document.getElementById('modalItemName').value = name;
+  document.getElementById('modalItemTitle').innerText = `Reorder: ${name}`;
+  document.getElementById('modalOrderQty').value = "1";
+  document.getElementById('orderModal').style.display = "flex";
+}
 
-  const orderQty = parseInt(input);
-  if (isNaN(orderQty) || orderQty <= 0) {
-    alert("Please enter a valid quantity.");
-    return;
-  }
+function closeOrderModal() {
+  document.getElementById('orderModal').style.display = "none";
+}
+
+async function submitVendorOrder() {
+  const itemId = document.getElementById('modalItemId').value;
+  const itemName = document.getElementById('modalItemName').value;
+  const orderQty = parseInt(document.getElementById('modalOrderQty').value);
+  const unit = document.getElementById('modalOrderUnit').value;
+
+  if (isNaN(orderQty) || orderQty <= 0) return alert("Enter a valid quantity");
+
+  const formattedName = `${itemName} (${orderQty} ${unit})`;
 
   const { error } = await supabaseClient.from('vendor_order_list').insert([{
     item_id: itemId,
-    item_name: itemName,
+    item_name: formattedName,
     order_qty: orderQty,
     status: 'pending'
   }]);
 
   if (error) {
-    alert("Error adding to vendor list: " + error.message);
+    alert("Error adding item: " + error.message);
   } else {
-    alert(`Added ${orderQty}x ${itemName} to Next Month's Vendor List.`);
+    closeOrderModal();
     loadVendorList();
   }
 }
 
-// 5. Render Vendor Order Table
+// 5. Vendor Reorder List Render
 async function loadVendorList() {
   const wrapper = document.getElementById('vendorTableWrapper');
   if (!wrapper) return;
 
-  const { data: orders, error } = await supabaseClient
+  const { data: orders } = await supabaseClient
     .from('vendor_order_list')
     .select('*')
     .eq('status', 'pending')
     .order('added_at', { ascending: false });
 
-  if (error || !orders || orders.length === 0) {
-    wrapper.innerHTML = '<p style="color: #64748b; padding: 12px 0;">No items marked for vendor reorder yet.</p>';
+  if (!orders || orders.length === 0) {
+    wrapper.innerHTML = '<p style="color: #64748b; font-size: 13px;">No items marked for vendor reorder yet.</p>';
     return;
   }
 
-  wrapper.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Item Name</th>
-          <th>Order Quantity</th>
-          <th>Date Added</th>
-          <th style="text-align: right;">Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${orders.map(order => `
-          <tr>
-            <td><strong>${order.item_name}</strong></td>
-            <td><strong>${order.order_qty}</strong> units</td>
-            <td style="color: #64748b;">${new Date(order.added_at).toLocaleDateString()}</td>
-            <td style="text-align: right;">
-              <button class="btn btn-delete" onclick="removeFromVendorList('${order.id}')">Remove</button>
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
+  wrapper.innerHTML = orders.map(order => `
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px;">
+      <div>
+        <strong>${order.item_name}</strong>
+        <div style="font-size: 11px; color: #94a3b8;">Added: ${new Date(order.added_at).toLocaleDateString()}</div>
+      </div>
+      <button class="btn btn-delete" onclick="removeFromVendorList('${order.id}')">Remove</button>
+    </div>
+  `).join('');
 }
 
-// 6. Delete Functions
 async function removeFromVendorList(id) {
   await supabaseClient.from('vendor_order_list').delete().eq('id', id);
   loadVendorList();
 }
 
 async function deleteItem(id, name) {
-  if (!confirm(`Delete "${name}" entirely from pantry?`)) return;
+  if (!confirm(`Delete "${name}" from pantry?`)) return;
   await supabaseClient.from('pantry_items').delete().eq('id', id);
   loadPantry();
 }
 
-// 7. Copy Text to Clipboard
+// 6. Export List to Clipboard
 async function copyVendorList() {
   const { data: orders } = await supabaseClient.from('vendor_order_list').select('*').eq('status', 'pending');
   if (!orders || orders.length === 0) return alert('Vendor list is empty.');
 
-  const text = "DERIV PANTRY - NEXT MONTH VENDOR REORDER LIST\n\n" + 
-    orders.map(o => `• ${o.item_name}: ${o.order_qty} units`).join('\n');
-    
+  const text = "DERIV PANTRY - VENDOR ORDER LIST\n\n" + orders.map(o => `• ${o.item_name}`).join('\n');
   navigator.clipboard.writeText(text);
-  alert('Reorder list copied to clipboard!');
+  alert('Copied vendor list to clipboard!');
 }
 
-// 8. Download PDF with jsPDF
+// 7. Export List to PDF
 async function downloadVendorPDF() {
   const { data: orders } = await supabaseClient.from('vendor_order_list').select('*').eq('status', 'pending');
-  if (!orders || orders.length === 0) return alert('No items to export to PDF.');
+  if (!orders || orders.length === 0) return alert('No items to export.');
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
   doc.setFontSize(18);
   doc.text("Deriv Pantry - Vendor Order List", 14, 20);
-  
-  doc.setFontSize(11);
+  doc.setFontSize(10);
   doc.setTextColor(100);
-  doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 28);
+  doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 26);
 
-  const tableRows = orders.map((o, index) => [
-    index + 1,
+  const tableRows = orders.map((o, idx) => [
+    idx + 1,
     o.item_name,
-    `${o.order_qty} units`,
     new Date(o.added_at).toLocaleDateString()
   ]);
 
   doc.autoTable({
-    startY: 34,
-    head: [['#', 'Item Name', 'Quantity to Order', 'Request Date']],
+    startY: 32,
+    head: [['#', 'Item & Package Quantity', 'Date Added']],
     body: tableRows,
     theme: 'striped',
     headStyles: { fillColor: [37, 99, 235] },
@@ -253,5 +216,4 @@ async function downloadVendorPDF() {
   doc.save(`Deriv_Pantry_Order_${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
-// Run on page start
 loadPantry();
