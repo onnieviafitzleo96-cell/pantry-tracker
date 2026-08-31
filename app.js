@@ -4,7 +4,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 1. Initial Load - Mobile Card/List
+// 1. Initial Load - Pantry Items
 async function loadPantry() {
   const container = document.getElementById('pantryContainer');
   if (!container) return;
@@ -64,7 +64,7 @@ async function loadPantry() {
   }
 }
 
-// 2. Add Item
+// 2. Add New Pantry Item
 document.getElementById('addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('name').value.trim();
@@ -83,7 +83,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
   }
 });
 
-// 3. Quick +/- Quantity Prompt
+// 3. Increment/Decrement Stock
 async function promptQuantityUpdate(id, name, currentQty, type) {
   const actionText = type === 'minus' ? 'TAKE OUT / CONSUME from' : 'ADD to';
   const input = prompt(`How many units to ${actionText} "${name}"?`, "1");
@@ -98,12 +98,39 @@ async function promptQuantityUpdate(id, name, currentQty, type) {
   loadPantry();
 }
 
-// 4. Modal Flow for Pack / Carton Vendor Order
-function openOrderModal(id, name) {
-  document.getElementById('modalItemId').value = id;
-  document.getElementById('modalItemName').value = name;
-  document.getElementById('modalItemTitle').innerText = `Reorder: ${name}`;
+// 4. Modal Handlers (Reorder, Order New, Edit)
+function openOrderModal(itemId, itemName) {
+  document.getElementById('modalOrderId').value = "";
+  document.getElementById('modalItemId').value = itemId;
+  document.getElementById('modalItemName').value = itemName;
+  document.getElementById('modalItemName').disabled = true; // locked to existing item
+  document.getElementById('modalTitle').innerText = `Reorder: ${itemName}`;
   document.getElementById('modalOrderQty').value = "1";
+  document.getElementById('orderModal').style.display = "flex";
+}
+
+function openNewOrderModal() {
+  document.getElementById('modalOrderId').value = "";
+  document.getElementById('modalItemId').value = "";
+  document.getElementById('modalItemName').value = "";
+  document.getElementById('modalItemName').disabled = false; // editable for brand new item
+  document.getElementById('modalTitle').innerText = "+ Order New Item";
+  document.getElementById('modalOrderQty').value = "1";
+  document.getElementById('orderModal').style.display = "flex";
+}
+
+function openEditOrderModal(orderId, itemId, currentFullName, currentQty) {
+  document.getElementById('modalOrderId').value = orderId;
+  document.getElementById('modalItemId').value = itemId || "";
+  
+  // Extract base name if contains package format
+  const match = currentFullName.match(/^(.*?)\s*\(/);
+  const baseName = match ? match[1] : currentFullName;
+
+  document.getElementById('modalItemName').value = baseName;
+  document.getElementById('modalItemName').disabled = !!itemId;
+  document.getElementById('modalTitle').innerText = `Edit: ${baseName}`;
+  document.getElementById('modalOrderQty').value = currentQty;
   document.getElementById('orderModal').style.display = "flex";
 }
 
@@ -112,31 +139,38 @@ function closeOrderModal() {
 }
 
 async function submitVendorOrder() {
-  const itemId = document.getElementById('modalItemId').value;
-  const itemName = document.getElementById('modalItemName').value;
+  const orderId = document.getElementById('modalOrderId').value;
+  const itemId = document.getElementById('modalItemId').value || null;
+  const itemName = document.getElementById('modalItemName').value.trim();
   const orderQty = parseInt(document.getElementById('modalOrderQty').value);
   const unit = document.getElementById('modalOrderUnit').value;
 
-  if (isNaN(orderQty) || orderQty <= 0) return alert("Enter a valid quantity");
+  if (!itemName) return alert("Please enter an item name.");
+  if (isNaN(orderQty) || orderQty <= 0) return alert("Please enter a valid quantity.");
 
   const formattedName = `${itemName} (${orderQty} ${unit})`;
 
-  const { error } = await supabaseClient.from('vendor_order_list').insert([{
-    item_id: itemId,
-    item_name: formattedName,
-    order_qty: orderQty,
-    status: 'pending'
-  }]);
-
-  if (error) {
-    alert("Error adding item: " + error.message);
+  if (orderId) {
+    // Edit existing order
+    await supabaseClient.from('vendor_order_list').update({
+      item_name: formattedName,
+      order_qty: orderQty
+    }).eq('id', orderId);
   } else {
-    closeOrderModal();
-    loadVendorList();
+    // Insert new order
+    await supabaseClient.from('vendor_order_list').insert([{
+      item_id: itemId,
+      item_name: formattedName,
+      order_qty: orderQty,
+      status: 'pending'
+    }]);
   }
+
+  closeOrderModal();
+  loadVendorList();
 }
 
-// 5. Vendor Reorder List Render
+// 5. Vendor Reorder List
 async function loadVendorList() {
   const wrapper = document.getElementById('vendorTableWrapper');
   if (!wrapper) return;
@@ -153,14 +187,54 @@ async function loadVendorList() {
   }
 
   wrapper.innerHTML = orders.map(order => `
-    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px;">
+    <div class="vendor-row">
       <div>
         <strong>${order.item_name}</strong>
         <div style="font-size: 11px; color: #94a3b8;">Added: ${new Date(order.added_at).toLocaleDateString()}</div>
       </div>
-      <button class="btn btn-delete" onclick="removeFromVendorList('${order.id}')">Remove</button>
+      <div class="vendor-actions">
+        <button class="btn btn-received" onclick="markAsReceived('${order.id}', '${order.item_id}', '${order.item_name}')">✓ Received</button>
+        <button class="btn" onclick="openEditOrderModal('${order.id}', '${order.item_id || ''}', '${order.item_name}', ${order.order_qty})">✏️ Edit</button>
+        <button class="btn btn-delete" onclick="removeFromVendorList('${order.id}')">🗑</button>
+      </div>
     </div>
   `).join('');
+}
+
+// 6. Handle "Received" Items (Updates inventory stock directly)
+async function markAsReceived(orderId, itemId, fullItemName) {
+  const match = fullItemName.match(/^(.*?)\s*\(/);
+  const baseName = match ? match[1].trim() : fullItemName.trim();
+
+  const input = prompt(`Delivery arrived for "${baseName}"!\nHow many individual units arrived in total to add to inventory?`, "24");
+  if (input === null) return;
+
+  const receivedCount = parseInt(input);
+  if (isNaN(receivedCount) || receivedCount < 0) return alert("Please enter a valid number.");
+
+  if (itemId && itemId !== "null" && itemId !== "undefined") {
+    // Item already existed in pantry: update its quantity
+    const { data: existing } = await supabaseClient.from('pantry_items').select('current_qty').eq('id', itemId).single();
+    if (existing) {
+      await supabaseClient.from('pantry_items').update({ current_qty: existing.current_qty + receivedCount }).eq('id', itemId);
+    }
+  } else {
+    // Brand new item: create a new pantry record
+    const thresholdInput = prompt(`Set minimum alert threshold for new item "${baseName}":`, "5");
+    const threshold = parseInt(thresholdInput) || 5;
+
+    await supabaseClient.from('pantry_items').insert([{
+      name: baseName,
+      current_qty: receivedCount,
+      threshold_qty: threshold
+    }]);
+  }
+
+  // Remove from pending vendor list
+  await supabaseClient.from('vendor_order_list').delete().eq('id', orderId);
+
+  alert(`Added ${receivedCount} units of ${baseName} to inventory and cleared from vendor list!`);
+  loadPantry();
 }
 
 async function removeFromVendorList(id) {
@@ -174,7 +248,7 @@ async function deleteItem(id, name) {
   loadPantry();
 }
 
-// 6. Export List to Clipboard
+// 7. Clipboard and PDF Export
 async function copyVendorList() {
   const { data: orders } = await supabaseClient.from('vendor_order_list').select('*').eq('status', 'pending');
   if (!orders || orders.length === 0) return alert('Vendor list is empty.');
@@ -184,7 +258,6 @@ async function copyVendorList() {
   alert('Copied vendor list to clipboard!');
 }
 
-// 7. Export List to PDF
 async function downloadVendorPDF() {
   const { data: orders } = await supabaseClient.from('vendor_order_list').select('*').eq('status', 'pending');
   if (!orders || orders.length === 0) return alert('No items to export.');
