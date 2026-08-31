@@ -1,11 +1,13 @@
 // --- CONFIGURATION ---
 const SUPABASE_URL = "https://wezopvfoqsmwcsogkhqh.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indlem9wdmZvcXNtd2Nzb2draHFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMjAzNzcsImV4cCI6MjEwMzY5NjM3N30.Pg9GUsQKI-ylL8RdCrNCE39tbWslDMt7JTuTQrArCAI";
+
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // 1. Initial Load - Table View
 async function loadPantry() {
   const container = document.getElementById('pantryContainer');
+  if (!container) return;
   
   try {
     const { data: items, error } = await supabaseClient
@@ -51,8 +53,8 @@ async function loadPantry() {
                 <td style="color: #64748b;">${item.threshold_qty}</td>
                 <td>
                   <div style="display: flex; gap: 6px; align-items: center;">
-                    <button class="qty-btn" type="button" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'minus')">-</button>
-                    <button class="qty-btn" type="button" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'add')">+</button>
+                    <button class="qty-btn" type="button" title="Remove" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'minus')">-</button>
+                    <button class="qty-btn" type="button" title="Add" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'add')">+</button>
                   </div>
                 </td>
                 <td style="text-align: right;">
@@ -154,6 +156,8 @@ async function promptVendorOrder(itemId, itemName) {
 // 5. Render Vendor Order Table
 async function loadVendorList() {
   const wrapper = document.getElementById('vendorTableWrapper');
+  if (!wrapper) return;
+
   const { data: orders, error } = await supabaseClient
     .from('vendor_order_list')
     .select('*')
