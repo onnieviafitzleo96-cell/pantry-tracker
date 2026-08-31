@@ -2,14 +2,15 @@
 const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE"; // e.g., https://xyz.supabase.co
 const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY_HERE";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Renamed to supabaseClient to prevent browser naming collisions
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // 1. Initial Load
 async function loadPantry() {
   const grid = document.getElementById('pantryGrid');
   
   try {
-    const { data: items, error } = await supabase
+    const { data: items, error } = await supabaseClient
       .from('pantry_items')
       .select('*')
       .order('created_at', { ascending: false });
@@ -42,15 +43,15 @@ async function loadPantry() {
 
             <!-- Custom +/- adjust buttons -->
             <div class="qty-controls">
-              <button class="qty-btn" title="Remove quantity" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'minus')">-</button>
+              <button class="qty-btn" type="button" title="Remove quantity" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'minus')">-</button>
               <span style="font-size: 12px; color: #475569; font-weight: 500;">Adjust Qty</span>
-              <button class="qty-btn" title="Add quantity" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'add')">+</button>
-              <button class="btn" style="color: #dc2626; margin-left: auto; padding: 4px 8px; font-size: 12px;" onclick="deleteItem('${item.id}', '${item.name}')">Delete</button>
+              <button class="qty-btn" type="button" title="Add quantity" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'add')">+</button>
+              <button class="btn" type="button" style="color: #dc2626; margin-left: auto; padding: 4px 8px; font-size: 12px;" onclick="deleteItem('${item.id}', '${item.name}')">Delete</button>
             </div>
           </div>
 
           ${isLow ? `
-            <button class="btn-reorder" onclick="promptVendorOrder('${item.id}', '${item.name}')">
+            <button class="btn-reorder" type="button" onclick="promptVendorOrder('${item.id}', '${item.name}')">
               + Add to Next Month's List
             </button>
           ` : ''}
@@ -61,7 +62,7 @@ async function loadPantry() {
     loadVendorList();
   } catch (err) {
     console.error(err);
-    grid.innerHTML = `<p style="color: red;">Error connecting to database. Check console logs & Supabase keys.</p>`;
+    grid.innerHTML = `<p style="color: red;">Error connecting to database: ${err.message || 'Check console'}</p>`;
   }
 }
 
@@ -72,7 +73,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
   const current_qty = parseInt(document.getElementById('qty').value);
   const threshold_qty = parseInt(document.getElementById('threshold').value);
 
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from('pantry_items')
     .insert([{ name, current_qty, threshold_qty }]);
 
@@ -89,7 +90,7 @@ async function promptQuantityUpdate(id, name, currentQty, type) {
   const actionText = type === 'minus' ? 'REMOVE / CONSUME from' : 'ADD to';
   const input = prompt(`How many units do you want to ${actionText} "${name}"?`, "1");
   
-  if (input === null) return; // User cancelled
+  if (input === null) return;
   const count = parseInt(input);
 
   if (isNaN(count) || count <= 0) {
@@ -99,7 +100,7 @@ async function promptQuantityUpdate(id, name, currentQty, type) {
 
   const newQty = type === 'minus' ? Math.max(0, currentQty - count) : currentQty + count;
 
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from('pantry_items')
     .update({ current_qty: newQty })
     .eq('id', id);
@@ -122,7 +123,7 @@ async function promptVendorOrder(itemId, itemName) {
     return;
   }
 
-  const { error } = await supabase.from('vendor_order_list').insert([{
+  const { error } = await supabaseClient.from('vendor_order_list').insert([{
     item_id: itemId,
     item_name: itemName,
     order_qty: orderQty,
@@ -140,7 +141,7 @@ async function promptVendorOrder(itemId, itemName) {
 // 5. Render Vendor Order Table
 async function loadVendorList() {
   const wrapper = document.getElementById('vendorTableWrapper');
-  const { data: orders, error } = await supabase
+  const { data: orders, error } = await supabaseClient
     .from('vendor_order_list')
     .select('*')
     .eq('status', 'pending')
@@ -179,19 +180,19 @@ async function loadVendorList() {
 
 // 6. Delete Functions
 async function removeFromVendorList(id) {
-  await supabase.from('vendor_order_list').delete().eq('id', id);
+  await supabaseClient.from('vendor_order_list').delete().eq('id', id);
   loadVendorList();
 }
 
 async function deleteItem(id, name) {
   if (!confirm(`Delete "${name}" entirely from pantry?`)) return;
-  await supabase.from('pantry_items').delete().eq('id', id);
+  await supabaseClient.from('pantry_items').delete().eq('id', id);
   loadPantry();
 }
 
 // 7. Copy Text to Clipboard
 async function copyVendorList() {
-  const { data: orders } = await supabase.from('vendor_order_list').select('*').eq('status', 'pending');
+  const { data: orders } = await supabaseClient.from('vendor_order_list').select('*').eq('status', 'pending');
   if (!orders || orders.length === 0) return alert('Vendor list is empty.');
 
   const text = "DERIV PANTRY - NEXT MONTH VENDOR REORDER LIST\n\n" + 
@@ -203,13 +204,12 @@ async function copyVendorList() {
 
 // 8. Download PDF with jsPDF
 async function downloadVendorPDF() {
-  const { data: orders } = await supabase.from('vendor_order_list').select('*').eq('status', 'pending');
+  const { data: orders } = await supabaseClient.from('vendor_order_list').select('*').eq('status', 'pending');
   if (!orders || orders.length === 0) return alert('No items to export to PDF.');
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  // Header Title
   doc.setFontSize(18);
   doc.text("Deriv Pantry - Vendor Order List", 14, 20);
   
@@ -217,7 +217,6 @@ async function downloadVendorPDF() {
   doc.setTextColor(100);
   doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 28);
 
-  // Table Data
   const tableRows = orders.map((o, index) => [
     index + 1,
     o.item_name,
