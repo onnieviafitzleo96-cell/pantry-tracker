@@ -2,45 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Deriv Pantry List</title>
   
   <!-- Supabase Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
-  <!-- jsPDF & AutoTable for PDF Generation -->
+  <!-- jsPDF & AutoTable -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; max-width: 950px; margin: auto; background: #f8fafc; color: #1e293b; }
-    .section { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 24px; border: 1px solid #e2e8f0; }
-    h1 { color: #0f172a; margin-bottom: 24px; }
-    h2 { font-size: 1.2rem; margin-top: 0; color: #334155; }
-    .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-    input { padding: 10px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 14px; }
-    .btn { padding: 8px 14px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; font-weight: 500; font-size: 13px; transition: all 0.15s ease-in-out; }
-    .btn:hover { background: #f1f5f9; }
-    .btn-primary { background: #2563eb; color: white; border: none; }
-    .btn-primary:hover { background: #1d4ed8; }
-    .btn-pdf { background: #059669; color: white; border: none; }
-    .btn-pdf:hover { background: #047857; }
-    .btn-reorder { background: #dc2626; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
-    .btn-reorder:hover { background: #b91c1c; }
-    .btn-delete { color: #dc2626; border-color: #fecaca; background: #fff5f5; font-size: 12px; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
-    .btn-delete:hover { background: #fee2e2; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 12px; max-width: 800px; margin: auto; background: #f1f5f9; color: #0f172a; }
+    .section { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 16px; border: 1px solid #e2e8f0; }
+    h1 { font-size: 1.5rem; margin: 8px 0 16px; }
+    h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 12px; color: #334155; }
+    
+    .form-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    @media (min-width: 600px) { .form-grid { grid-template-columns: 2fr 1fr 1fr auto; } }
+    
+    input, select { padding: 10px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 14px; width: 100%; outline: none; }
+    input:focus, select:focus { border-color: #2563eb; }
 
-    /* Table Styling */
-    .table-container { overflow-x: auto; margin-top: 12px; }
-    table { width: 100%; border-collapse: collapse; text-align: left; }
-    th { background: #f8fafc; padding: 12px 14px; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; }
-    td { padding: 14px; border-bottom: 1px solid #e2e8f0; font-size: 14px; vertical-align: middle; }
-    tr.low-stock-row { background: #fff7ed; }
+    .btn { padding: 10px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; cursor: pointer; font-weight: 600; font-size: 13px; text-align: center; }
+    .btn-primary { background: #2563eb; color: white; border: none; }
+    .btn-pdf { background: #059669; color: white; border: none; }
+    .btn-reorder { background: #dc2626; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; width: 100%; margin-top: 8px; }
+    .btn-delete { color: #dc2626; border-color: #fecaca; background: #fff5f5; font-size: 12px; padding: 6px 10px; border-radius: 6px; }
+
+    /* Compact Mobile Item Row */
+    .item-row { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; background: white; }
+    .item-row.low-stock { border-left: 5px solid #ef4444; background: #fff7ed; }
+    .item-header { display: flex; justify-content: space-between; align-items: baseline; }
+    .item-details { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #64748b; }
+    .stock-highlight { font-size: 18px; font-weight: bold; color: #0f172a; }
+    .badge-low { background: #fee2e2; color: #dc2626; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
     
-    .badge-low { background: #fed7aa; color: #c2410c; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; display: inline-block; margin-left: 6px; }
-    
-    .qty-btn { width: 30px; height: 30px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f1f5f9; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-    .qty-btn:hover { background: #e2e8f0; }
+    .qty-controls { display: flex; gap: 8px; align-items: center; }
+    .qty-btn { width: 34px; height: 34px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; font-size: 16px; cursor: pointer; }
+
+    /* Modal Sheet for Mobile Selection */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99; align-items: center; justify-content: center; padding: 16px; }
+    .modal-card { background: white; width: 100%; max-width: 360px; padding: 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
   </style>
 </head>
 <body>
@@ -48,33 +53,57 @@
 
   <!-- 1. Add Item Form -->
   <div class="section">
-    <h2>+ Add New Pantry Item</h2>
-    <form id="addForm" class="form-row">
-      <input type="text" id="name" placeholder="Item Name (e.g. Coke Can)" required style="flex: 2; min-width: 160px;" />
-      <input type="number" id="qty" placeholder="Total Qty" min="0" required style="flex: 1; min-width: 90px;" />
-      <input type="number" id="threshold" placeholder="Alert at (Min Qty)" min="1" required style="flex: 1; min-width: 120px;" />
-      <button type="submit" class="btn btn-primary">+ Add Item</button>
+    <h2>+ Add New Item</h2>
+    <form id="addForm" class="form-grid">
+      <input type="text" id="name" placeholder="Item Name (e.g. Coke)" required />
+      <input type="number" id="qty" placeholder="Total Qty" min="0" required />
+      <input type="number" id="threshold" placeholder="Min Alert Qty" min="1" required />
+      <button type="submit" class="btn btn-primary">+ Add</button>
     </form>
   </div>
 
-  <!-- 2. Inventory List Section -->
+  <!-- 2. Mobile Inventory List -->
   <div class="section">
     <h2>Current Inventory</h2>
-    <div id="pantryContainer" class="table-container">Loading items...</div>
+    <div id="pantryContainer">Loading items...</div>
   </div>
 
   <!-- 3. Vendor Orders Section -->
   <div class="section">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
       <h2>📋 Next Month Vendor List</h2>
-      <div style="display: flex; gap: 8px;">
-        <button class="btn" onclick="copyVendorList()">📋 Copy Text</button>
-        <button class="btn btn-pdf" onclick="downloadVendorPDF()">📄 Download PDF</button>
-      </div>
     </div>
-    
-    <div id="vendorTableWrapper" class="table-container">
-      <p style="color: #64748b; padding: 12px 0;">No items marked for vendor reorder yet.</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+      <button class="btn" onclick="copyVendorList()">📋 Copy Text</button>
+      <button class="btn btn-pdf" onclick="downloadVendorPDF()">📄 Export PDF</button>
+    </div>
+    <div id="vendorTableWrapper">
+      <p style="color: #64748b; font-size: 13px;">No items marked for vendor reorder yet.</p>
+    </div>
+  </div>
+
+  <!-- Mobile Reorder Popup Modal -->
+  <div id="orderModal" class="modal-overlay">
+    <div class="modal-card">
+      <h3 id="modalItemTitle" style="margin-top: 0; font-size: 16px;">Add to Vendor Order</h3>
+      <input type="hidden" id="modalItemId" />
+      <input type="hidden" id="modalItemName" />
+
+      <label style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Quantity</label>
+      <input type="number" id="modalOrderQty" value="1" min="1" style="margin-bottom: 12px;" />
+
+      <label style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Packaging Type</label>
+      <select id="modalOrderUnit" style="margin-bottom: 16px;">
+        <option value="Carton">Carton(s)</option>
+        <option value="Pack">Pack(s)</option>
+        <option value="Box">Box(es)</option>
+        <option value="Cans/Units">Cans / Individual Units</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="btn" style="flex: 1;" onclick="closeOrderModal()">Cancel</button>
+        <button class="btn btn-primary" style="flex: 1;" onclick="submitVendorOrder()">Add to List</button>
+      </div>
     </div>
   </div>
 
