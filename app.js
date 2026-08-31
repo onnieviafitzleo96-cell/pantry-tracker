@@ -1,13 +1,11 @@
 // --- CONFIGURATION ---
-const SUPABASE_URL = "https://wezopvfoqsmwcsogkhqh.supabase.co"; // e.g., https://xyz.supabase.co
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indlem9wdmZvcXNtd2Nzb2draHFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMjAzNzcsImV4cCI6MjEwMzY5NjM3N30.Pg9GUsQKI-ylL8RdCrNCE39tbWslDMt7JTuTQrArCAI";
-
-// Renamed to supabaseClient to prevent browser naming collisions
+const SUPABASE_URL = "https://wezopvfoqsmwcsogkhqh.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indlem9wdmZvcXNtd2Nzb2draHFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMjAzNzcsImV4cCI6MjEwMzY5NjM3N30.Pg9GUsQKI-ylL8RdCrNCE39tbWslDMt7JTuTQrArCAI"
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 1. Initial Load
+// 1. Initial Load - Table View
 async function loadPantry() {
-  const grid = document.getElementById('pantryGrid');
+  const container = document.getElementById('pantryContainer');
   
   try {
     const { data: items, error } = await supabaseClient
@@ -18,51 +16,66 @@ async function loadPantry() {
     if (error) throw error;
 
     if (!items || items.length === 0) {
-      grid.innerHTML = '<p style="color: #64748b;">No items in pantry. Add your first item above!</p>';
+      container.innerHTML = '<p style="color: #64748b; padding: 12px 0;">No items in pantry. Add your first item above!</p>';
       loadVendorList();
       return;
     }
 
-    grid.innerHTML = items.map(item => {
-      const isLow = item.current_qty <= item.threshold_qty;
-      const dateAdded = item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A';
+    container.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Item Name</th>
+            <th>Date Added</th>
+            <th>Stock Left</th>
+            <th>Alert Threshold</th>
+            <th>Adjust Quantity</th>
+            <th style="text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(item => {
+            const isLow = item.current_qty <= item.threshold_qty;
+            const dateAdded = item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A';
 
-      return `
-        <div class="card ${isLow ? 'low-stock' : ''}">
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-              <strong style="font-size: 16px;">${item.name}</strong>
-              ${isLow ? '<span class="badge-low">LOW STOCK</span>' : ''}
-            </div>
-            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Added on: ${dateAdded}</div>
-            
-            <div style="margin: 14px 0 6px;">
-              <span style="font-size: 28px; font-weight: bold; color: ${isLow ? '#dc2626' : '#0f172a'};">${item.current_qty}</span>
-              <span style="font-size: 13px; color: #64748b;"> left (Alert at: ${item.threshold_qty})</span>
-            </div>
-
-            <!-- Custom +/- adjust buttons -->
-            <div class="qty-controls">
-              <button class="qty-btn" type="button" title="Remove quantity" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'minus')">-</button>
-              <span style="font-size: 12px; color: #475569; font-weight: 500;">Adjust Qty</span>
-              <button class="qty-btn" type="button" title="Add quantity" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'add')">+</button>
-              <button class="btn" type="button" style="color: #dc2626; margin-left: auto; padding: 4px 8px; font-size: 12px;" onclick="deleteItem('${item.id}', '${item.name}')">Delete</button>
-            </div>
-          </div>
-
-          ${isLow ? `
-            <button class="btn-reorder" type="button" onclick="promptVendorOrder('${item.id}', '${item.name}')">
-              + Add to Next Month's List
-            </button>
-          ` : ''}
-        </div>
-      `;
-    }).join('');
+            return `
+              <tr class="${isLow ? 'low-stock-row' : ''}">
+                <td>
+                  <strong>${item.name}</strong>
+                  ${isLow ? '<span class="badge-low">REORDER</span>' : ''}
+                </td>
+                <td style="color: #64748b;">${dateAdded}</td>
+                <td>
+                  <strong style="font-size: 16px; color: ${isLow ? '#dc2626' : '#0f172a'};">${item.current_qty}</strong>
+                </td>
+                <td style="color: #64748b;">${item.threshold_qty}</td>
+                <td>
+                  <div style="display: flex; gap: 6px; align-items: center;">
+                    <button class="qty-btn" type="button" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'minus')">-</button>
+                    <button class="qty-btn" type="button" onclick="promptQuantityUpdate('${item.id}', '${item.name}', ${item.current_qty}, 'add')">+</button>
+                  </div>
+                </td>
+                <td style="text-align: right;">
+                  <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                    ${isLow ? `
+                      <button class="btn btn-reorder" type="button" onclick="promptVendorOrder('${item.id}', '${item.name}')">
+                        + Add to Vendor List
+                      </button>
+                    ` : ''}
+                    <button class="btn btn-delete" type="button" onclick="deleteItem('${item.id}', '${item.name}')">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
 
     loadVendorList();
   } catch (err) {
     console.error(err);
-    grid.innerHTML = `<p style="color: red;">Error connecting to database: ${err.message || 'Check console'}</p>`;
+    container.innerHTML = `<p style="color: red;">Error connecting to database: ${err.message || 'Check console'}</p>`;
   }
 }
 
@@ -85,7 +98,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
   }
 });
 
-// 3. Pop-up input to subtract or add specific count
+// 3. Pop-up input to subtract or add quantity
 async function promptQuantityUpdate(id, name, currentQty, type) {
   const actionText = type === 'minus' ? 'REMOVE / CONSUME from' : 'ADD to';
   const input = prompt(`How many units do you want to ${actionText} "${name}"?`, "1");
@@ -112,7 +125,7 @@ async function promptQuantityUpdate(id, name, currentQty, type) {
   }
 }
 
-// 4. Pop-up input to specify how many units to reorder for next month
+// 4. Pop-up input to reorder items for vendor list
 async function promptVendorOrder(itemId, itemName) {
   const input = prompt(`How many units of "${itemName}" should be ordered next month?`, "24");
   if (input === null) return;
@@ -148,7 +161,7 @@ async function loadVendorList() {
     .order('added_at', { ascending: false });
 
   if (error || !orders || orders.length === 0) {
-    wrapper.innerHTML = '<p style="color: #64748b;">No items marked for vendor reorder yet.</p>';
+    wrapper.innerHTML = '<p style="color: #64748b; padding: 12px 0;">No items marked for vendor reorder yet.</p>';
     return;
   }
 
@@ -166,10 +179,10 @@ async function loadVendorList() {
         ${orders.map(order => `
           <tr>
             <td><strong>${order.item_name}</strong></td>
-            <td>${order.order_qty} units</td>
+            <td><strong>${order.order_qty}</strong> units</td>
             <td style="color: #64748b;">${new Date(order.added_at).toLocaleDateString()}</td>
             <td style="text-align: right;">
-              <button class="btn" style="font-size: 11px; padding: 3px 8px;" onclick="removeFromVendorList('${order.id}')">Remove</button>
+              <button class="btn btn-delete" onclick="removeFromVendorList('${order.id}')">Remove</button>
             </td>
           </tr>
         `).join('')}
