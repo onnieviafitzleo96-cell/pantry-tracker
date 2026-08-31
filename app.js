@@ -1,6 +1,6 @@
 // --- CONFIGURATION ---
-const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE"; // e.g., https://xyz.supabase.co
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY_HERE";
+const SUPABASE_URL = "https://wezopvfoqsmwcsogkhqh.supabase.co/rest/v1/"; // e.g., https://xyz.supabase.co
+const SUPABASE_ANON_KEY = "sb_publishable_N0F1M-B3Pjh8jQrufFb4cA_ejG76c_E";
 
 // Renamed to supabaseClient to prevent browser naming collisions
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
